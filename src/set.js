@@ -165,7 +165,7 @@ function downloadPlugin(event, data) {
     fileList.map((url) => {
       return new Promise((resolve, reject) => {
         https.get(
-          `https://registry.npmmirror.com/vue-plugin-hiprint/${data}/files/dist/${url}`,
+          `https://registry.npmmirror.com/@ankkaya/vue-plugin-hiprint/${data}/files/dist/${url}`,
           (res) => {
             let filePath = "";
             if (app.isPackaged) {
