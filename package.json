@@ -12,6 +12,7 @@
     "fix-sqlite3": "node ./build/fixSqlite3bug.js",
     "build-w": "electron-builder -w nsis:ia32 && node ./tools/rename --tag win_x32",
     "build-w-64": "electron-builder -w nsis:x64 && node ./tools/rename --tag win_x64",
+    "build-w-64-skip-rebuild": "electron-builder -w nsis:x64 --config.npmRebuild=false && node ./tools/rename --tag win_x64",
     "build-m": "electron-builder -m --x64 && node ./tools/rename --tag mac_x64",
     "build-m-arm64": "electron-builder -m --arm64 && node ./tools/rename --tag mac_arm64",
     "build-m-universal": "electron-builder -m --universal && node ./tools/rename --tag mac_universal",
@@ -113,7 +114,7 @@
     "win32-pdf-printer": "^4.0.1"
   },
   "devDependencies": {
-    "electron": "^17.0.0",
+    "electron": "^17.4.11",
     "electron-builder": "23.0.6",
     "fs-extra": "^9.1.0",
     "prettier": "^1.16.4",

@@ -311,6 +311,7 @@ function printToPDF(event, data) {
  *
  * */
 async function printFun(event, data) {
+ try {
   let socket = null;
   if (data.clientType === "local") {
     socket = SOCKET_SERVER.sockets.sockets.get(data.socketId);
@@ -349,7 +350,12 @@ async function printFun(event, data) {
     }
   });
   if (printerError) {
-    const { StatusMsg } = getCurrentPrintStatusByName(defaultPrinter);
+    let StatusMsg = "未知";
+    try {
+      ({ StatusMsg } = getCurrentPrintStatusByName(defaultPrinter));
+    } catch (e) {
+      console.error("获取打印机状态失败:", e.message);
+    }
     console.log(
       `${data.replyId ? "中转服务" : "插件端"} ${socket.id} 模板 【${
         data.templateId
@@ -427,10 +433,12 @@ async function printFun(event, data) {
           const result = {
             msg: "打印成功",
             templateId: data.templateId,
+            printId: data.printId,
             replyId: data.replyId,
           };
           logPrintResult("success");
           socket.emit("render-print-success", result);
+          socket.emit("print-result", { ...result, status: "success" });
         } else {
           console.log(
             `${data.replyId ? "中转服务" : "插件端"} ${socket.id} 模板 【${
@@ -441,6 +449,14 @@ async function printFun(event, data) {
           socket.emit("render-print-error", {
             msg: failureReason,
             templateId: data.templateId,
+            printId: data.printId,
+            replyId: data.replyId,
+          });
+          socket.emit("print-result", {
+            status: "error",
+            msg: failureReason,
+            templateId: data.templateId,
+            printId: data.printId,
             replyId: data.replyId,
           });
         }
@@ -451,6 +467,30 @@ async function printFun(event, data) {
       delete RENDER_RUNNER_DONE[data.taskId];
     },
   );
+ } catch (error) {
+    console.error("printFun 打印异常:", error);
+    const socket = data.clientType === "local"
+      ? SOCKET_SERVER.sockets.sockets.get(data.socketId)
+      : SOCKET_CLIENT;
+    if (socket) {
+      socket.emit("render-print-error", {
+        msg: "打印异常: " + error.message,
+        templateId: data.templateId,
+        replyId: data.replyId,
+      });
+      socket.emit("print-result", {
+        status: "error",
+        msg: "打印异常: " + error.message,
+        templateId: data.templateId,
+        printId: data.printId,
+        replyId: data.replyId,
+      });
+    }
+    if (RENDER_RUNNER_DONE[data.taskId]) {
+      RENDER_RUNNER_DONE[data.taskId]();
+      delete RENDER_RUNNER_DONE[data.taskId];
+    }
+ }
 }
 
 /**

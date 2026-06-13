@@ -52,6 +52,7 @@ async function createPrintWindow() {
  */
 function initPrintEvent() {
   ipcMain.on("do", async (event, data) => {
+   try {
     let socket = null;
     if (data.clientType === "local") {
       socket = SOCKET_SERVER.sockets.sockets.get(data.socketId);
@@ -83,7 +84,12 @@ function initPrintEvent() {
       }
     });
     if (printerError) {
-      const { StatusMsg } = getCurrentPrintStatusByName(defaultPrinter);
+      let StatusMsg = "未知";
+      try {
+        ({ StatusMsg } = getCurrentPrintStatusByName(defaultPrinter));
+      } catch (e) {
+        console.error("获取打印机状态失败:", e.message);
+      }
       console.log(
         `${data.replyId ? "中转服务" : "插件端"} ${socket.id} 模板 【${
           data.templateId
@@ -93,6 +99,15 @@ function initPrintEvent() {
         socket.emit("error", {
           msg: data.printer + "打印机异常",
           templateId: data.templateId,
+          printId: data.printId,
+          replyId: data.replyId,
+        });
+      socket &&
+        socket.emit("print-result", {
+          status: "error",
+          msg: data.printer + "打印机异常",
+          templateId: data.templateId,
+          printId: data.printId,
           replyId: data.replyId,
         });
       if (data.taskId) {
@@ -168,10 +183,12 @@ function initPrintEvent() {
                 const result = {
                   msg: "打印成功",
                   templateId: data.templateId,
+                  printId: data.printId,
                   replyId: data.replyId,
                 };
                 socket.emit("successs", result); // 兼容 vue-plugin-hiprint 0.0.56 之前包
                 socket.emit("success", result);
+                socket.emit("print-result", { ...result, status: "success" });
               }
               logPrintResult("success");
             })
@@ -187,6 +204,15 @@ function initPrintEvent() {
                 socket.emit("error", {
                   msg: "打印失败: " + err.message,
                   templateId: data.templateId,
+                  printId: data.printId,
+                  replyId: data.replyId,
+                });
+              socket &&
+                socket.emit("print-result", {
+                  status: "error",
+                  msg: "打印失败: " + err.message,
+                  templateId: data.templateId,
+                  printId: data.printId,
                   replyId: data.replyId,
                 });
               logPrintResult("failed", err.message);
@@ -220,10 +246,12 @@ function initPrintEvent() {
               const result = {
                 msg: "打印成功",
                 templateId: data.templateId,
+                printId: data.printId,
                 replyId: data.replyId,
               };
               socket.emit("successs", result); // 兼容 vue-plugin-hiprint 0.0.56 之前包
               socket.emit("success", result);
+              socket.emit("print-result", { ...result, status: "success" });
             });
           }
           logPrintResult("success");
@@ -240,6 +268,15 @@ function initPrintEvent() {
             socket.emit("error", {
               msg: "打印失败: " + err.message,
               templateId: data.templateId,
+              printId: data.printId,
+              replyId: data.replyId,
+            });
+          socket &&
+            socket.emit("print-result", {
+              status: "error",
+              msg: "打印失败: " + err.message,
+              templateId: data.templateId,
+              printId: data.printId,
               replyId: data.replyId,
             });
           logPrintResult("failed", err.message);
@@ -271,6 +308,15 @@ function initPrintEvent() {
           socket.emit("error", {
             msg: errorMsg,
             templateId: data.templateId,
+            printId: data.printId,
+            replyId: data.replyId,
+          });
+        socket &&
+          socket.emit("print-result", {
+            status: "error",
+            msg: errorMsg,
+            templateId: data.templateId,
+            printId: data.printId,
             replyId: data.replyId,
           });
         logPrintResult("failed", errorMsg);
@@ -297,10 +343,12 @@ function initPrintEvent() {
               const result = {
                 msg: "打印成功",
                 templateId: data.templateId,
+                printId: data.printId,
                 replyId: data.replyId,
               };
               socket.emit("successs", result); // 兼容 vue-plugin-hiprint 0.0.56 之前包
               socket.emit("success", result);
+              socket.emit("print-result", { ...result, status: "success" });
             });
           }
           logPrintResult("success");
@@ -317,6 +365,15 @@ function initPrintEvent() {
             socket.emit("error", {
               msg: "打印失败: " + err.message,
               templateId: data.templateId,
+              printId: data.printId,
+              replyId: data.replyId,
+            });
+          socket &&
+            socket.emit("print-result", {
+              status: "error",
+              msg: "打印失败: " + err.message,
+              templateId: data.templateId,
+              printId: data.printId,
               replyId: data.replyId,
             });
           logPrintResult("failed", err.message);
@@ -377,14 +434,24 @@ function initPrintEvent() {
             const result = {
               msg: "打印成功",
               templateId: data.templateId,
+              printId: data.printId,
               replyId: data.replyId,
             };
             socket.emit("successs", result); // 兼容 vue-plugin-hiprint 0.0.56 之前包
             socket.emit("success", result);
+            socket.emit("print-result", { ...result, status: "success" });
           } else {
             socket.emit("error", {
               msg: failureReason,
               templateId: data.templateId,
+              printId: data.printId,
+              replyId: data.replyId,
+            });
+            socket.emit("print-result", {
+              status: "error",
+              msg: failureReason,
+              templateId: data.templateId,
+              printId: data.printId,
               replyId: data.replyId,
             });
           }
@@ -398,6 +465,32 @@ function initPrintEvent() {
         MAIN_WINDOW.webContents.send("printTask", PRINT_RUNNER.isBusy());
       },
     );
+   } catch (error) {
+      console.error("print do 打印异常:", error);
+      const socket = data.clientType === "local"
+        ? SOCKET_SERVER.sockets.sockets.get(data.socketId)
+        : SOCKET_CLIENT;
+      if (socket) {
+        socket.emit("error", {
+          msg: "打印异常: " + error.message,
+          templateId: data.templateId,
+          printId: data.printId,
+          replyId: data.replyId,
+        });
+        socket.emit("print-result", {
+          status: "error",
+          msg: "打印异常: " + error.message,
+          templateId: data.templateId,
+          printId: data.printId,
+          replyId: data.replyId,
+        });
+      }
+      if (data.taskId && PRINT_RUNNER_DONE[data.taskId]) {
+        PRINT_RUNNER_DONE[data.taskId]();
+        delete PRINT_RUNNER_DONE[data.taskId];
+      }
+      MAIN_WINDOW.webContents.send("printTask", PRINT_RUNNER.isBusy());
+   }
   });
 }
 
