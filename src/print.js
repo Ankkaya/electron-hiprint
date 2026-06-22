@@ -90,14 +90,15 @@ function initPrintEvent() {
       } catch (e) {
         console.error("获取打印机状态失败:", e.message);
       }
+      const printerErrorMsg = `打印机【${defaultPrinter || "未指定"}】队列异常，可能存在卡住的打印任务，请清理打印队列后重试`;
       console.log(
         `${data.replyId ? "中转服务" : "插件端"} ${socket.id} 模板 【${
           data.templateId
-        }】 打印失败，打印机异常，打印机：${defaultPrinter}, 打印机状态：${StatusMsg}`,
+        }】 打印失败，${printerErrorMsg}，打印机状态：${StatusMsg}`,
       );
       socket &&
         socket.emit("error", {
-          msg: data.printer + "打印机异常",
+          msg: printerErrorMsg,
           templateId: data.templateId,
           printId: data.printId,
           replyId: data.replyId,
@@ -105,7 +106,7 @@ function initPrintEvent() {
       socket &&
         socket.emit("print-result", {
           status: "error",
-          msg: data.printer + "打印机异常",
+          msg: printerErrorMsg,
           templateId: data.templateId,
           printId: data.printId,
           replyId: data.replyId,
