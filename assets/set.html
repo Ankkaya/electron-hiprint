@@ -499,6 +499,13 @@
                   display: this.setTab === "advancedSet",
                 },
                 {
+                  label: "批量打印任务拆分",
+                  prop: "splitBatchPrintTasks",
+                  is: "el-switch",
+                  tips: "关闭时保持旧行为，将批量数据作为一个 Windows 打印任务；开启后每张单据独立提交",
+                  display: this.setTab === "advancedSet",
+                },
+                {
                   label: "关闭主窗口动作",
                   prop: "closeType",
                   is: "el-radio-group",

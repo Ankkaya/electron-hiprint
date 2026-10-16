@@ -9,6 +9,61 @@ const dayjs = require("dayjs");
 const { store, getCurrentPrintStatusByName } = require("../tools/utils");
 const db = require("../tools/database");
 
+const renderPrintBatchResults = new Map();
+
+function emitRenderPrintResult(socket, data, status, msg) {
+  if (!socket) return;
+
+  if (!data.batchId || !data.batchSize) {
+    const result = {
+      msg,
+      templateId: data.templateId,
+      printId: data.printId,
+      replyId: data.replyId,
+    };
+    socket.emit(
+      status === "success" ? "render-print-success" : "render-print-error",
+      result,
+    );
+    socket.emit("print-result", { ...result, status });
+    return;
+  }
+
+  const batchKey = `${data.clientType}:${data.socketId}:${data.batchId}`;
+  const batchResult = renderPrintBatchResults.get(batchKey) || {
+    completed: 0,
+    errors: [],
+  };
+  batchResult.completed++;
+  if (status !== "success") {
+    batchResult.errors.push(msg);
+  }
+
+  if (batchResult.completed < data.batchSize) {
+    renderPrintBatchResults.set(batchKey, batchResult);
+    return;
+  }
+
+  renderPrintBatchResults.delete(batchKey);
+  const batchStatus = batchResult.errors.length ? "error" : "success";
+  const result = {
+    msg:
+      batchStatus === "success"
+        ? `批量打印成功，共 ${data.batchSize} 个任务`
+        : `批量打印失败：${batchResult.errors.join("；")}`,
+    templateId: data.templateId,
+    printId: data.batchPrintId || data.batchId,
+    replyId: data.replyId,
+    batchId: data.batchId,
+    batchSize: data.batchSize,
+  };
+  socket.emit(
+    batchStatus === "success" ? "render-print-success" : "render-print-error",
+    result,
+  );
+  socket.emit("print-result", { ...result, status: batchStatus });
+}
+
 // 这是 1920 * 1080 屏幕常规工作区域尺寸
 let windowWorkArea = {
   width: 1920,
@@ -362,21 +417,7 @@ async function printFun(event, data) {
         data.templateId
       }】 打印失败，${printerErrorMsg}，打印机状态：${StatusMsg}`,
     );
-    socket &&
-      socket.emit("render-print-error", {
-        msg: printerErrorMsg,
-        templateId: data.templateId,
-        printId: data.printId,
-        replyId: data.replyId,
-      });
-    socket &&
-      socket.emit("print-result", {
-        status: "error",
-        msg: printerErrorMsg,
-        templateId: data.templateId,
-        printId: data.printId,
-        replyId: data.replyId,
-      });
+    emitRenderPrintResult(socket, data, "error", printerErrorMsg);
     // 通过 taskMap 调用 task done 回调
     RENDER_RUNNER_DONE[data.taskId]();
     delete RENDER_RUNNER_DONE[data.taskId];
@@ -438,15 +479,8 @@ async function printFun(event, data) {
               data.pageNum
             }`,
           );
-          const result = {
-            msg: "打印成功",
-            templateId: data.templateId,
-            printId: data.printId,
-            replyId: data.replyId,
-          };
           logPrintResult("success");
-          socket.emit("render-print-success", result);
-          socket.emit("print-result", { ...result, status: "success" });
+          emitRenderPrintResult(socket, data, "success", "打印成功");
         } else {
           console.log(
             `${data.replyId ? "中转服务" : "插件端"} ${socket.id} 模板 【${
@@ -454,19 +488,7 @@ async function printFun(event, data) {
             }】 打印失败，打印类型 JSON，打印机：${deviceName}，原因：${failureReason}`,
           );
           logPrintResult("failed", failureReason);
-          socket.emit("render-print-error", {
-            msg: failureReason,
-            templateId: data.templateId,
-            printId: data.printId,
-            replyId: data.replyId,
-          });
-          socket.emit("print-result", {
-            status: "error",
-            msg: failureReason,
-            templateId: data.templateId,
-            printId: data.printId,
-            replyId: data.replyId,
-          });
+          emitRenderPrintResult(socket, data, "error", failureReason);
         }
       }
       // 通过 taskMap 调用 task done 回调
@@ -480,20 +502,7 @@ async function printFun(event, data) {
     const socket = data.clientType === "local"
       ? SOCKET_SERVER.sockets.sockets.get(data.socketId)
       : SOCKET_CLIENT;
-    if (socket) {
-      socket.emit("render-print-error", {
-        msg: "打印异常: " + error.message,
-        templateId: data.templateId,
-        replyId: data.replyId,
-      });
-      socket.emit("print-result", {
-        status: "error",
-        msg: "打印异常: " + error.message,
-        templateId: data.templateId,
-        printId: data.printId,
-        replyId: data.replyId,
-      });
-    }
+    emitRenderPrintResult(socket, data, "error", "打印异常: " + error.message);
     if (RENDER_RUNNER_DONE[data.taskId]) {
       RENDER_RUNNER_DONE[data.taskId]();
       delete RENDER_RUNNER_DONE[data.taskId];

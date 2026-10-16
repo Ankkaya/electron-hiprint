@@ -19,6 +19,79 @@ const https = require("node:https");
 const fs = require("node:fs");
 const { store } = require("../tools/utils");
 
+const PLUGIN_CDN_URL =
+  "https://cdn.jsdelivr.net/npm/@ankkaya/vue-plugin-hiprint";
+const MAX_REDIRECTS = 5;
+
+function downloadPluginFile(url, filePath, minSize, redirectCount = 0) {
+  const tempPath = `${filePath}.download`;
+
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, (res) => {
+      if (
+        res.statusCode >= 300 &&
+        res.statusCode < 400 &&
+        res.headers.location
+      ) {
+        res.resume();
+        if (redirectCount >= MAX_REDIRECTS) {
+          reject(new Error("插件下载重定向次数过多"));
+          return;
+        }
+        resolve(
+          downloadPluginFile(
+            new URL(res.headers.location, url),
+            filePath,
+            minSize,
+            redirectCount + 1,
+          ),
+        );
+        return;
+      }
+
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error(`插件下载失败，HTTP 状态码：${res.statusCode}`));
+        return;
+      }
+
+      const fileStream = fs.createWriteStream(tempPath);
+      let downloadedSize = 0;
+      res.on("data", (chunk) => {
+        downloadedSize += chunk.length;
+      });
+      res.on("error", (error) => fileStream.destroy(error));
+      fileStream.on("error", (error) => {
+        fs.rm(tempPath, { force: true }, () => reject(error));
+      });
+      fileStream.on("finish", () => {
+        fileStream.close((error) => {
+          if (error) {
+            fs.rm(tempPath, { force: true }, () => reject(error));
+            return;
+          }
+          if (downloadedSize < minSize) {
+            fs.rm(tempPath, { force: true }, () =>
+              reject(new Error(`插件文件不完整：${downloadedSize} bytes`)),
+            );
+            return;
+          }
+          fs.rename(tempPath, filePath, (renameError) => {
+            if (renameError) {
+              fs.rm(tempPath, { force: true }, () => reject(renameError));
+              return;
+            }
+            resolve();
+          });
+        });
+      });
+      res.pipe(fileStream);
+    });
+
+    request.on("error", reject);
+  });
+}
+
 /**
  * @description: 创建设置窗口
  * @return {BrowserWindow} SET_WINDOW 设置窗口
@@ -160,34 +233,18 @@ function setConfig(event, data) {
  * @return {void}
  */
 function downloadPlugin(event, data) {
-  const fileList = ["vue-plugin-hiprint.js", "print-lock.css"];
+  const fileList = [
+    { name: "vue-plugin-hiprint.js", minSize: 100000 },
+    { name: "print-lock.css", minSize: 1000 },
+  ];
   Promise.all(
-    fileList.map((url) => {
-      return new Promise((resolve, reject) => {
-        https.get(
-          `https://registry.npmmirror.com/@ankkaya/vue-plugin-hiprint/${data}/files/dist/${url}`,
-          (res) => {
-            let filePath = "";
-            if (app.isPackaged) {
-              filePath = path.join(
-                app.getAppPath(),
-                "../",
-                `plugin/${data}_${url}`,
-              );
-            } else {
-              filePath = path.join(app.getAppPath(), `plugin/${data}_${url}`);
-            }
-            const fileStream = fs.createWriteStream(filePath);
-            res.pipe(fileStream);
-            res.on("end", () => {
-              resolve();
-            });
-            res.on("error", () => {
-              reject();
-            });
-          },
-        );
-      });
+    fileList.map(({ name, minSize }) => {
+      const pluginDirectory = app.isPackaged
+        ? path.join(app.getAppPath(), "../plugin")
+        : path.join(app.getAppPath(), "plugin");
+      const filePath = path.join(pluginDirectory, `${data}_${name}`);
+      const url = `${PLUGIN_CDN_URL}@${data}/dist/${name}`;
+      return downloadPluginFile(url, filePath, minSize);
     }),
   )
     .then(() => {

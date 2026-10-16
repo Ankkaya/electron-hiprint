@@ -226,6 +226,44 @@ const watchTaskInstance = generateWatchTask(
 )();
 
 /**
+ * @description: 将 render-print 数据按单据拆分为独立打印任务
+ * @param {Object} data 打印数据
+ * @param {Object} socket socket.io socket
+ * @param {"local"|"transit"} clientType 客户端类型
+ * @return {void}
+ */
+function enqueueRenderPrintTasks(data, socket, clientType) {
+  const records =
+    Array.isArray(data.data) && data.data.length ? data.data : [data.data];
+  const shouldSplit = records.length > 1;
+  const batchId = shouldSplit ? data.printId || uuidv7() : undefined;
+
+  records.forEach((record, batchIndex) => {
+    const taskData = {
+      ...data,
+      data: shouldSplit ? [record] : data.data,
+      socketId: socket.id,
+      taskId: uuidv7(),
+      clientType,
+      ...(shouldSplit
+        ? {
+            batchId,
+            batchIndex,
+            batchSize: records.length,
+            batchPrintId: data.printId,
+            printId: `${batchId}:${batchIndex}`,
+          }
+        : {}),
+    };
+
+    RENDER_RUNNER.add((done) => {
+      RENDER_WINDOW.webContents.send("print", taskData);
+      RENDER_RUNNER_DONE[taskData.taskId] = done;
+    }, true);
+  });
+}
+
+/**
  * @description: 尝试获取客户端唯一id，依赖管理员权限与注册表读取
  * @return {string}
  */
@@ -625,13 +663,7 @@ function initServeEvent(server) {
 
     socket.on("render-print", (data) => {
       if (data) {
-        RENDER_RUNNER.add((done) => {
-          data.socketId = socket.id;
-          data.taskId = uuidv7();
-          data.clientType = "local";
-          RENDER_WINDOW.webContents.send("print", data);
-          RENDER_RUNNER_DONE[data.taskId] = done;
-        });
+        enqueueRenderPrintTasks(data, socket, "local");
       }
     });
 
@@ -835,13 +867,7 @@ function initClientEvent() {
 
   client.on("render-print", (data) => {
     if (data) {
-      RENDER_RUNNER.add((done) => {
-        data.socketId = client.id;
-        data.taskId = uuidv7();
-        data.clientType = "transit";
-        RENDER_WINDOW.webContents.send("print", data);
-        RENDER_RUNNER_DONE[data.taskId] = done;
-      });
+      enqueueRenderPrintTasks(data, client, "transit");
     }
   });
 

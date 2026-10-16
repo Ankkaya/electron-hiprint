@@ -166,6 +166,7 @@
 
 table.hiprint-printElement-tableTarget {
   width: 100%;
+  table-layout: fixed;
 }
 
 .hiprint-printElement-tableTarget, .hiprint-printElement-tableTarget tr, .hiprint-printElement-tableTarget td {
