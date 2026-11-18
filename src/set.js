@@ -17,7 +17,11 @@ const {
 const path = require("path");
 const https = require("node:https");
 const fs = require("node:fs");
-const { store } = require("../tools/utils");
+const {
+  store,
+  getPluginDirectory,
+  getDownloadedVersions,
+} = require("../tools/utils");
 
 const PLUGIN_CDN_URL =
   "https://cdn.jsdelivr.net/npm/@ankkaya/vue-plugin-hiprint";
@@ -237,11 +241,9 @@ function downloadPlugin(event, data) {
     { name: "vue-plugin-hiprint.js", minSize: 100000 },
     { name: "print-lock.css", minSize: 1000 },
   ];
+  const pluginDirectory = getPluginDirectory();
   Promise.all(
     fileList.map(({ name, minSize }) => {
-      const pluginDirectory = app.isPackaged
-        ? path.join(app.getAppPath(), "../plugin")
-        : path.join(app.getAppPath(), "plugin");
       const filePath = path.join(pluginDirectory, `${data}_${name}`);
       const url = `${PLUGIN_CDN_URL}@${data}/dist/${name}`;
       return downloadPluginFile(url, filePath, minSize);
@@ -425,20 +427,6 @@ function removeEvent() {
   ipcMain.removeListener("downloadPlugin", downloadPlugin);
   ipcMain.removeListener("getPrintersList", getPrintersList);
   SET_WINDOW = null;
-}
-
-function getDownloadedVersions() {
-  let pluginDir = path.join(app.getAppPath(), "plugin");
-  if (app.isPackaged) {
-    pluginDir = path.join(app.getAppPath(), "../", "plugin");
-  }
-  if (!fs.existsSync(pluginDir)) {
-    return [];
-  }
-  return fs
-    .readdirSync(pluginDir)
-    .filter((file) => file.endsWith(".js")) // 假设插件文件以 .js 结尾
-    .map((file) => file.split("_")[0]); // 提取版本号
 }
 
 /**

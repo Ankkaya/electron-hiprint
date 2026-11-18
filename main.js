@@ -24,6 +24,7 @@ const setSetup = require("./src/set");
 const printLogSetup = require("./src/printLog");
 const {
   store,
+  getDownloadedVersions,
   address,
   initServeEvent,
   initClientEvent,
@@ -165,6 +166,14 @@ async function initialize() {
 
   // 当electron完成初始化
   app.whenReady().then(() => {
+    if (store.get("pluginVersion") === "0.0.61-beta8") {
+      const versions = getDownloadedVersions();
+      if (
+        !versions.includes("0.0.61-beta8") && versions.includes("0.0.61-beta9")
+      ) {
+        store.set("pluginVersion", "0.0.61-beta9");
+      }
+    }
     // 创建浏览器窗口
     createWindow();
     app.on("activate", function() {

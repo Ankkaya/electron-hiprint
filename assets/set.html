@@ -209,6 +209,13 @@
           };
         },
         computed: {
+          pluginVersionOptions() {
+            return _.unionBy(
+              this.versions,
+              this.downloadedVersions.map((version) => ({ value: version })),
+              "value",
+            );
+          },
           formOptions() {
             return {
               size: "small",
@@ -275,7 +282,7 @@
                     filterable: true,
                     defaultFirstOption: true,
                   },
-                  options: this.versions,
+                  options: this.pluginVersionOptions,
                   optionRender: (h, option) => {
                     const isDownloaded = this.downloadedVersions.includes(
                       option.value,

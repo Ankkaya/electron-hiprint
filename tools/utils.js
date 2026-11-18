@@ -133,7 +133,7 @@ const schema = {
   },
   pluginVersion: {
     type: "string",
-    default: "0.0.61-beta6",
+    default: "0.0.61-beta9",
   },
   logPath: {
     type: "string",
@@ -158,6 +158,25 @@ const schema = {
 };
 
 const store = new Store({ schema });
+
+function getPluginDirectory() {
+  return app.isPackaged
+    ? path.join(app.getAppPath(), "../plugin")
+    : path.join(app.getAppPath(), "plugin");
+}
+
+function getDownloadedVersions() {
+  const pluginDir = getPluginDirectory();
+  if (!fs.existsSync(pluginDir)) {
+    return [];
+  }
+  const files = fs.readdirSync(pluginDir);
+  const scriptSuffix = "_vue-plugin-hiprint.js";
+  return files
+    .filter((file) => file.endsWith(scriptSuffix))
+    .map((file) => file.slice(0, -scriptSuffix.length))
+    .filter((version) => files.includes(`${version}_print-lock.css`));
+}
 
 /**
  * @description: 获取当前系统 IP 地址
@@ -987,6 +1006,8 @@ ${detail}`;
 
 module.exports = {
   store,
+  getPluginDirectory,
+  getDownloadedVersions,
   address: _address,
   initServeEvent,
   initClientEvent,
